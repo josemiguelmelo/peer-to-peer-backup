@@ -77,4 +77,39 @@ public class File {
             e.printStackTrace();
         }
     }
+
+    public void addChunk(Chunk chunk)
+    {
+        chunks.add(chunk);
+    }
+
+
+    public void save(String pathToSave){
+        try{
+            java.io.File file = new java.io.File(pathToSave);
+
+            if(!file.exists())
+            {
+                file.createNewFile();
+            }
+
+            OutputStream outputStream = null;
+
+            // append = true
+            outputStream = new FileOutputStream(pathToSave, true);
+
+            System.out.println("Chunk saved");
+
+            for(int i = 0; i < chunks.size(); i++)
+            {
+                chunks.get(i).getBodyOutputStream().writeTo(outputStream);
+            }
+
+        }catch(IOException e){
+            e.printStackTrace();
+        }
+
+
+
+    }
 }

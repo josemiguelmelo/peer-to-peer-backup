@@ -74,18 +74,18 @@ public class MulticastServerThread {
 
     public void parseMessage(String message, byte[] messageBytes) {
         String[] messageParts = message.split(" ");
-
+        byte[] body;
         switch(messageParts[0]) {
             case "PUTCHUNK":
                 System.out.println("PUTCHUNK received...");
 
                 if(messageParts.length < 4)
                 {
-                    System.out.println("An error as occurred");
+                    System.out.println("An error has occurred");
                     return;
                 }
 
-                byte[] body = this.getBodyFromMessage(messageBytes);
+                body = this.getBodyFromMessage(messageBytes);
 
                 System.out.println("Body size: " + body.length);
 
@@ -95,6 +95,28 @@ public class MulticastServerThread {
                         Integer.parseInt(messageParts[3]),
                         body
                 );
+                break;
+
+            case "GETCHUNK":
+                System.out.println("GETCHUNK received...");
+
+                if(messageParts.length < 4)
+                {
+                    System.out.println("An error has occurred");
+                    return;
+                }
+
+                String fileId = messageParts[2];
+                String chunkNo = messageParts[3];
+
+                Chunk chunk = new Chunk();
+                chunk.loadChunk(Integer.parseInt(chunkNo), fileId, savePath);
+
+                System.out.println("Chunk size = " + chunk.getBody().length);
+
+                this.sendMessage("CHUNK " + Protocol.VERSION + " " + fileId + " " + chunkNo + " " + Protocol.crlf() + Protocol.crlf(), chunk);
+
+
                 break;
             default:
                 System.out.println("Received message that couldn't be parsed.");
@@ -126,6 +148,22 @@ public class MulticastServerThread {
         byte[] buf;
 
         buf = message.getBytes();
+
+        DatagramPacket packet;
+        packet = new DatagramPacket(buf, buf.length, address, port);
+
+        try {
+            this.socket.send(packet);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    public void sendMessage(String message, Chunk chunk) {
+        byte[] buf = new byte[message.getBytes().length + chunk.getBody().length];
+        System.arraycopy(message.getBytes(), 0, buf, 0, message.getBytes().length);
+        System.arraycopy(chunk.getBody(), 0, buf, message.getBytes().length, chunk.getBody().length);
 
         DatagramPacket packet;
         packet = new DatagramPacket(buf, buf.length, address, port);

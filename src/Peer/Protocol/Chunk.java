@@ -1,6 +1,8 @@
 package Peer.Protocol;
 
 import java.io.*;
+import java.io.File;
+import java.nio.file.Files;
 
 public class Chunk {
 
@@ -12,6 +14,10 @@ public class Chunk {
 
     private String fileId;
     private ByteArrayOutputStream content;
+
+    public Chunk(){
+        content = new ByteArrayOutputStream();
+    }
 
     public Chunk(int number, int chunkSize, ByteArrayOutputStream content) {
         this.number = number;
@@ -35,6 +41,26 @@ public class Chunk {
 
     public byte[] getBody() {
         return content.toByteArray();
+    }
+
+    public ByteArrayOutputStream getBodyOutputStream() { return this.content; }
+
+
+    public void loadChunk(Integer number, String fileId, String path){
+        java.io.File file = new File(path + number + "-" + fileId);
+
+        if(file.isFile()){
+
+            System.out.println(file.toPath());
+
+            try {
+                byte[] data = Files.readAllBytes(file.toPath());
+
+                this.content.write(data, 0, data.length);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public Boolean save(String pathToSave)
