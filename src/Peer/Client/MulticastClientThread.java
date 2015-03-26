@@ -2,22 +2,35 @@ package Peer.Client;
 
 import java.io.IOException;
 import java.net.*;
+import java.nio.charset.Charset;
 
 import Peer.Protocol.Chunk;
 import Peer.Protocol.File;
 import Peer.Protocol.Protocol;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class MulticastClientThread extends Thread {
 
     int port;
     MulticastSocket socket;
     InetAddress address;
+    JSONArray filesBackedUp;
 
     public MulticastClientThread(String ip, int port) throws IOException, InterruptedException {
         this.port = port;
         this.address = InetAddress.getByName(ip);
         this.socket = new MulticastSocket(port);
         socket.joinGroup(address);
+
+        String filesBackedUpString = Protocol.readFile(Protocol.filesBackedUp, Charset.defaultCharset());
+
+        if(!filesBackedUpString.equals("")) {
+            JSONObject files = new JSONObject(filesBackedUpString.trim());
+            this.filesBackedUp = files.getJSONArray("files");
+        } else {
+            this.filesBackedUp = new JSONArray();
+        }
     }
 
     public void run() {
@@ -42,13 +55,31 @@ public class MulticastClientThread extends Thread {
     }
 
     public void getChunk() throws InterruptedException {
+        String filename = "image.gif";
+        filesBackedUp.length();
 
+        String fileId = "";
+
+        for(int i=0; i<filesBackedUp.length(); i++) {
+            if(filesBackedUp.getJSONObject(i).has(filename))
+            {
+                fileId = filesBackedUp.getJSONObject(i).getString(filename);
+            }
+        }
+
+        if(fileId.equals(""))
+        {
+            System.out.println("File " + filename + " was not backed up.");
+            return;
+        }
+
+        System.out.println("File ID: " + fileId);
     }
 
     public void putChunk() throws InterruptedException {
         DatagramPacket receivedPacket;
 
-        File file = new File("/Users/ruigomes/Desktop/image.gif", 2);
+        File file = new File("/Users/ruigomes/Desktop/image.gif", 1);
 
         String messageToSend;
 
@@ -91,6 +122,21 @@ public class MulticastClientThread extends Thread {
 
         }
 
+        appendFileId(file.getName(), file.getId());
+
+    }
+
+    private void appendFileId(String filename, String fileId)
+    {
+        JSONObject fileJson = new JSONObject();
+        fileJson.put(filename, fileId);
+
+        filesBackedUp.put(fileJson);
+
+        JSONObject filesObject = new JSONObject();
+        filesObject.put("files", filesBackedUp);
+
+        Protocol.writeFile(Protocol.filesBackedUp, filesObject.toString());
     }
 
     private Integer sendChunk(File file, String messageToSend, Integer timeout, Chunk chunk) {

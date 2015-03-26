@@ -37,15 +37,28 @@ public class Chunk {
         return content.toByteArray();
     }
 
-    public void save()
+    public Boolean save(String pathToSave)
     {
+        java.io.File f = new java.io.File(pathToSave + number + "-" + fileId);
+        if(f.isFile())
+        {
+            return false;
+        }
+
+        java.io.File saveDirectory = new java.io.File(pathToSave);
+        if (!saveDirectory.exists()) saveDirectory.mkdir();
+
         OutputStream outputStream = null;
         try {
-            outputStream = new FileOutputStream(number + "-" + fileId);
+            f.createNewFile();
+            outputStream = new FileOutputStream(pathToSave + number + "-" + fileId);
             this.content.writeTo(outputStream);
+            System.out.println("Chunk saved");
         } catch (IOException e) {
             e.printStackTrace();
         }
+
+        return true;
     }
 
 

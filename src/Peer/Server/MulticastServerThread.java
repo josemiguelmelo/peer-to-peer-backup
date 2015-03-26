@@ -9,17 +9,36 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
+import java.nio.charset.Charset;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class MulticastServerThread {
     int port;
     MulticastSocket socket;
     InetAddress address;
+    int maximumSpace;
+    String savePath;
 
     public MulticastServerThread(String ip, int port) throws IOException {
         this.port = port;
         this.socket = new MulticastSocket(port);
         this.address = InetAddress.getByName(ip);
         socket.joinGroup(address);
+        this.loadSettings();
+    }
+
+    public void loadSettings() throws IOException {
+        String configString = Protocol.readFile(Protocol.settingsPath, Charset.defaultCharset());
+
+        JSONObject config = new JSONObject(configString.trim());
+
+        this.maximumSpace = config.getInt("maximumSpace");
+        System.out.println("Max Space: " + this.maximumSpace);
+
+        this.savePath = config.getString("relativeSavePath");
+        System.out.println("Save Path: " + this.savePath);
     }
 
     public void run() throws IOException {
@@ -125,11 +144,13 @@ public class MulticastServerThread {
 
             bodyStream.write(body);
             Chunk chunk = new Chunk(fileId, chunkNumber, bodyStream.size(), bodyStream);
-            chunk.save();
 
-            Thread.sleep(Protocol.random.nextInt(400));
+            if(chunk.save(savePath)) {
+                Thread.sleep(Protocol.random.nextInt(400));
 
-            this.sendMessage("STORED " + version + " " + fileId + " " + chunkNumber + Protocol.crlf() + Protocol.crlf());
+                this.sendMessage("STORED " + version + " " + fileId + " " + chunkNumber + Protocol.crlf() + Protocol.crlf());
+            }
+
         } catch (InterruptedException | IOException e)
         {
             e.printStackTrace();

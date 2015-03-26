@@ -6,6 +6,7 @@ import java.util.ArrayList;
 
 public class File {
 
+    private String name;
     private String path;
     private String id;
     private int replicationDegree;
@@ -18,6 +19,9 @@ public class File {
 
         this.chunks = new ArrayList<Chunk>();
 
+        java.io.File f = new java.io.File(path);
+        this.name = f.getName();
+
         this.generateId();
         this.createChunks();
     }
@@ -25,6 +29,10 @@ public class File {
     public String getId()
     {
         return this.id;
+    }
+
+    public String getName() {
+        return name;
     }
 
     public int getReplicationDegree() {
