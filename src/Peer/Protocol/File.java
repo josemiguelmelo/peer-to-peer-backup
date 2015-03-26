@@ -1,29 +1,49 @@
-package Peer.Client.Protocol;
+package Peer.Protocol;
 
 import java.io.*;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 
 public class File {
 
     private String path;
-
     private String id;
     private int replicationDegree;
 
     private ArrayList<Chunk> chunks;
 
     public File(String path, int replicationDegree) {
-
         this.path = path;
         this.replicationDegree = replicationDegree;
 
         this.chunks = new ArrayList<Chunk>();
 
+        this.generateId();
         this.createChunks();
+    }
+
+    public String getId()
+    {
+        return this.id;
+    }
+
+    public int getReplicationDegree() {
+        return replicationDegree;
     }
 
     public ArrayList<Chunk> getChunks() {
         return this.chunks;
+    }
+
+    private void generateId()
+    {
+        java.io.File file = new java.io.File(this.path);
+        try {
+            this.id = Protocol.sha256(file.getName() + file.lastModified());
+        } catch (NoSuchAlgorithmException e)
+        {
+            e.printStackTrace();
+        }
     }
 
     private void createChunks()

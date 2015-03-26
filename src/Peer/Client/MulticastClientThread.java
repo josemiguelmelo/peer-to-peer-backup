@@ -3,18 +3,21 @@ package Peer.Client;
 import java.io.IOException;
 import java.net.*;
 
+import Peer.Protocol.Chunk;
+import Peer.Protocol.File;
+import Peer.Protocol.Protocol;
+
 public class MulticastClientThread extends Thread {
 
-    String ip;
     int port;
+    MulticastSocket socket;
+    InetAddress address;
 
-    MulticastSocket socket = null;
-
-    InetAddress address = null;
-
-    public MulticastClientThread(String ip, int port) {
-        this.ip = ip;
+    public MulticastClientThread(String ip, int port) throws IOException, InterruptedException {
         this.port = port;
+        this.address = InetAddress.getByName(ip);
+        this.socket = new MulticastSocket(port);
+        socket.joinGroup(address);
     }
 
     public void run() {
@@ -23,49 +26,131 @@ public class MulticastClientThread extends Thread {
         Integer port = 8888;
 
         try {
-            this.socket = new MulticastSocket(8888);
+            this.socket = new MulticastSocket(port);
             this.address = InetAddress.getByName(ip);
             this.socket.joinGroup(address);
         } catch (IOException e) {
             e.printStackTrace();
         }
-        this.putChunk(socket);
+
+        try {
+            this.putChunk();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
     }
 
-    public void putChunk(MulticastSocket socket) {
-        DatagramPacket sendPacket, receivedPacket;
-        Boolean running = true;
+    public void getChunk() throws InterruptedException {
 
-        while(running)
+    }
+
+    public void putChunk() throws InterruptedException {
+        DatagramPacket receivedPacket;
+
+        File file = new File("/Users/ruigomes/Desktop/image.gif", 2);
+
+        String messageToSend;
+
+        Integer retries;
+        Integer chunkReplications;
+        Integer timeout;
+
+        System.out.println("File Info. Chunks: " + file.getChunks().size());
+
+        for (Chunk chunk : file.getChunks()) {
+            retries = 1;
+            timeout = 500;
+            chunkReplications = 0;
+
+            System.out.println("\n =========== \nSending chunk no." + chunk.getNumber() + "\n =========== \n");
+
+            messageToSend = "PUTCHUNK"
+                    + " " + Protocol.VERSION
+                    + " " + file.getId()
+                    + " " + chunk.getNumber()
+                    + " " + file.getReplicationDegree()
+                    + " " + Protocol.crlf() + Protocol.crlf();
+
+            while(retries <= Protocol.maxRetries && chunkReplications < file.getReplicationDegree()) {
+                System.out.println("Retry #" + retries);
+
+                chunkReplications += sendChunk(file, messageToSend, timeout, chunk);
+
+                System.out.println("Retry Ended. Chunks received: " + chunkReplications);
+
+                retries++;
+                timeout = timeout * 2;
+            }
+
+            if(chunkReplications < file.getReplicationDegree())
+            {
+                System.out.println("Couldn't replicate chunk no." + chunk.getNumber() + " " + chunkReplications + " times.");
+                return;
+            }
+
+        }
+
+    }
+
+    private Integer sendChunk(File file, String messageToSend, Integer timeout, Chunk chunk) {
+        DatagramPacket receivedPacket;
+        sendMessage(messageToSend, chunk);
+
+        long t = System.currentTimeMillis();
+        long endTry = t + timeout;
+
+        Integer chunksStored = 0;
+
+        while(System.currentTimeMillis() < endTry)
         {
-            String dString = "PUTCHUNK";
-
-            byte[] buf = new byte[256];
-
-            buf = dString.getBytes();
-
-            InetAddress group = null;
             try {
-                group = InetAddress.getByName(this.ip);
 
-                sendPacket = new DatagramPacket(buf, buf.length, group, port);
+                byte[] buf = new byte[256];
 
-                socket.send(sendPacket);
-
-                //Receive confirmation
                 receivedPacket = new DatagramPacket(buf, buf.length);
-                socket.setSoTimeout(2000);
-                socket.receive(receivedPacket);
+                this.socket.setSoTimeout(timeout);
+                this.socket.receive(receivedPacket);
 
                 String received = new String(receivedPacket.getData(), 0, receivedPacket.getLength());
-                System.out.println(received);
 
-                Thread.sleep(1000);
+                received = received.replace(Protocol.crlf(), "");
 
-            } catch (IOException | InterruptedException e) {
+                String[] messageParts = received.split(" ");
+
+                if(        messageParts[0].equals("STORED")
+                        && messageParts[1].equals(Protocol.VERSION)
+                        && messageParts[2].equals(file.getId())
+                        && messageParts[3].equals(chunk.getNumber().toString())
+                        )
+                {
+                    System.out.println("Chunk stored.");
+                    chunksStored++;
+                }
+
+            } catch (SocketTimeoutException e)
+            {
+                System.out.println("Socket timed out.");
+            } catch (IOException e) {
                 e.printStackTrace();
             }
+        }
+
+        return chunksStored;
+    }
+
+    public void sendMessage(String message, Chunk chunk) {
+        byte[] buf = new byte[message.getBytes().length + chunk.getBody().length];
+        System.arraycopy(message.getBytes(), 0, buf, 0, message.getBytes().length);
+        System.arraycopy(chunk.getBody(), 0, buf, message.getBytes().length, chunk.getBody().length);
+
+        DatagramPacket packet;
+        packet = new DatagramPacket(buf, buf.length, address, port);
+
+        try {
+            this.socket.send(packet);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 }

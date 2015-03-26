@@ -1,47 +1,43 @@
 package Peer.Server;
 
+import Peer.Protocol.Chunk;
+import Peer.Protocol.KMPMatch;
+import Peer.Protocol.Protocol;
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
 
 public class MulticastServerThread {
-    String ip;
     int port;
+    MulticastSocket socket;
+    InetAddress address;
 
-    public MulticastServerThread(String ip, int port) {
-        this.ip = ip;
+    public MulticastServerThread(String ip, int port) throws IOException {
         this.port = port;
+        this.socket = new MulticastSocket(port);
+        this.address = InetAddress.getByName(ip);
+        socket.joinGroup(address);
     }
 
     public void run() throws IOException {
-
-        MulticastSocket socket = new MulticastSocket(8888);
-        InetAddress address = InetAddress.getByName(ip);
-        socket.joinGroup(address);
 
         boolean running = true;
         DatagramPacket receivedPacket;
 
         while (running) {
             try {
-                byte[] buf = new byte[256];
+                byte[] buf = new byte[65000];
 
                 receivedPacket = new DatagramPacket(buf, buf.length);
                 socket.receive(receivedPacket);
 
-                String received = new String(receivedPacket.getData(), 0, receivedPacket.getLength());
-                System.out.println(received);
+                String receivedMessage = new String(receivedPacket.getData(), 0, receivedPacket.getLength());
+                byte[] receivedMessageBytes = java.util.Arrays.copyOf(receivedPacket.getData(), receivedPacket.getLength());
 
-                String dString = "CONFIRMATION";
-
-                buf = dString.getBytes();
-
-                InetAddress group = InetAddress.getByName(ip);
-                DatagramPacket packet;
-                packet = new DatagramPacket(buf, buf.length, group, port);
-
-                socket.send(packet);
+                this.parseMessage(receivedMessage, receivedMessageBytes);
 
                 Thread.sleep(1000);
 
@@ -56,4 +52,90 @@ public class MulticastServerThread {
 
         socket.close();
     }
+
+    public void parseMessage(String message, byte[] messageBytes) {
+        String[] messageParts = message.split(" ");
+
+        switch(messageParts[0]) {
+            case "PUTCHUNK":
+                System.out.println("PUTCHUNK received...");
+
+                if(messageParts.length < 4)
+                {
+                    System.out.println("An error as occurred");
+                    return;
+                }
+
+                byte[] body = this.getBodyFromMessage(messageBytes);
+
+                System.out.println("Body size: " + body.length);
+
+                this.storeChunk(
+                        messageParts[1],
+                        messageParts[2],
+                        Integer.parseInt(messageParts[3]),
+                        body
+                );
+                break;
+            default:
+                System.out.println("Received message that couldn't be parsed.");
+                break;
+        }
+    }
+
+    public byte[] getBodyFromMessage(byte[] messageBytes)
+    {
+        Peer.Protocol.KMPMatch kmpMatch = new KMPMatch();
+
+        String stringPattern = Protocol.crlf() + Protocol.crlf();
+
+        byte[] pattern = stringPattern.getBytes();
+
+        int patternPosition = kmpMatch.indexOf(messageBytes, pattern);
+
+        patternPosition = patternPosition + 4;
+
+        byte[] body = new byte[messageBytes.length - patternPosition];
+
+        java.lang.System.arraycopy(messageBytes, patternPosition, body, 0, messageBytes.length - patternPosition);
+
+        return body;
+    }
+
+    public void sendMessage(String message)
+    {
+        byte[] buf;
+
+        buf = message.getBytes();
+
+        DatagramPacket packet;
+        packet = new DatagramPacket(buf, buf.length, address, port);
+
+        try {
+            this.socket.send(packet);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void storeChunk(String version, String fileId, Integer chunkNumber, byte[] body)
+    {
+        try {
+            ByteArrayOutputStream bodyStream = new ByteArrayOutputStream();
+
+            bodyStream.write(body);
+            Chunk chunk = new Chunk(fileId, chunkNumber, bodyStream.size(), bodyStream);
+            chunk.save();
+
+            Thread.sleep(Protocol.random.nextInt(400));
+
+            this.sendMessage("STORED " + version + " " + fileId + " " + chunkNumber + Protocol.crlf() + Protocol.crlf());
+        } catch (InterruptedException | IOException e)
+        {
+            e.printStackTrace();
+        }
+
+    }
+
+
 }
