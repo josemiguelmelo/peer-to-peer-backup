@@ -20,6 +20,8 @@ public class Protocol {
 
     public static String filesBackedUp = "files.json";
 
+    public static String chunksReplication = "chunks.json";
+
     public static String sha256(String string) throws NoSuchAlgorithmException
     {
         MessageDigest md;

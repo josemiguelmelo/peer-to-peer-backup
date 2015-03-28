@@ -11,6 +11,7 @@ import java.net.InetAddress;
 import java.net.MulticastSocket;
 import java.nio.charset.Charset;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -20,6 +21,7 @@ public class MulticastServerThread {
     InetAddress address;
     int maximumSpace;
     String savePath;
+    JSONArray chunksReplication;
 
     public MulticastServerThread(String ip, int port) throws IOException {
         this.port = port;
@@ -27,6 +29,15 @@ public class MulticastServerThread {
         this.address = InetAddress.getByName(ip);
         socket.joinGroup(address);
         this.loadSettings();
+
+        String chunkReplicationString = Protocol.readFile(Protocol.chunksReplication, Charset.defaultCharset());
+
+        if(!chunkReplicationString.equals("")) {
+            JSONObject files = new JSONObject(chunkReplicationString.trim());
+            this.chunksReplication = files.getJSONArray("chunks");
+        } else {
+            this.chunksReplication = new JSONArray();
+        }
     }
 
     public void loadSettings() throws IOException {
@@ -81,7 +92,7 @@ public class MulticastServerThread {
 
                 if(messageParts.length < 4)
                 {
-                    System.out.println("An error as occurred");
+                    System.out.println("Invalid PUTCHUNK message.");
                     return;
                 }
 
@@ -135,6 +146,23 @@ public class MulticastServerThread {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void appendChunkReplication(String chunk, int replication)
+    {
+        for(int i = 0; i < chunksReplication.length(); i++)
+        {
+            if(chunksReplication.getJSONObject(i).has(chunk))
+            {
+                replication += chunksReplication.getJSONObject(i).getInt(chunk);
+                chunksReplication.getJSONObject(i).put(chunk, replication);
+            }
+        }
+
+        JSONObject filesObject = new JSONObject();
+        filesObject.put("chunks", chunksReplication);
+
+        Protocol.writeFile(Protocol.chunksReplication, filesObject.toString());
     }
 
     public void storeChunk(String version, String fileId, Integer chunkNumber, byte[] body)
