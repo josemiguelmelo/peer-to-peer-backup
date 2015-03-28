@@ -1,12 +1,5 @@
 package Peer.Client;
 
-import java.io.ByteArrayOutputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.net.*;
-import java.nio.charset.Charset;
-import java.util.ArrayList;
-
 import Peer.Protocol.Chunk;
 import Peer.Protocol.File;
 import Peer.Protocol.KMPMatch;
@@ -14,18 +7,51 @@ import Peer.Protocol.Protocol;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.InetAddress;
+import java.net.MulticastSocket;
+import java.net.SocketTimeoutException;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Scanner;
+
 public class MulticastClientThread extends Thread {
 
-    int port;
-    MulticastSocket socket;
-    InetAddress address;
+    int mcPort;
+    MulticastSocket mcSocket;
+    InetAddress mcAddress;
+
+    int mdbPort;
+    MulticastSocket mdbSocket;
+    InetAddress mdbAddress;
+
+    int mdrPort;
+    MulticastSocket mdrSocket;
+    InetAddress mdrAddress;
+
+    Scanner in;
+
     JSONArray filesBackedUp;
 
-    public MulticastClientThread(String ip, int port) throws IOException, InterruptedException {
-        this.port = port;
-        this.address = InetAddress.getByName(ip);
-        this.socket = new MulticastSocket(port);
-        socket.joinGroup(address);
+    public MulticastClientThread(String mcIp, int mcPort, String mdbIp, int mdbPort, String mdrIp, int mdrPort) throws IOException, InterruptedException {
+        this.mcPort = mcPort;
+        this.mcAddress = InetAddress.getByName(mcIp);
+        this.mcSocket = new MulticastSocket(mcPort);
+        this.mcSocket.joinGroup(mcAddress);
+
+        this.mdbPort = mdbPort;
+        this.mdbAddress = InetAddress.getByName(mdbIp);
+        this.mdbSocket = new MulticastSocket(mdbPort);
+        this.mdbSocket.joinGroup(mdbAddress);
+
+        this.mdrPort = mdrPort;
+        this.mdrAddress = InetAddress.getByName(mdrIp);
+        this.mdrSocket = new MulticastSocket(mdrPort);
+        this.mdrSocket.joinGroup(mdrAddress);
+
+        in = new Scanner(System.in);
 
         String filesBackedUpString = Protocol.readFile(Protocol.filesBackedUp, Charset.defaultCharset());
 
@@ -38,33 +64,39 @@ public class MulticastClientThread extends Thread {
     }
 
     public void run() {
+        Boolean running = true;
 
-        String ip = "224.0.0.3";
-        Integer port = 8888;
+        while(running) {
+            System.out.println("What would you like to do?");
+            String action = in.nextLine();
+            String[] actionParts = action.split(" ");
 
-        try {
-            this.socket = new MulticastSocket(port);
-            this.address = InetAddress.getByName(ip);
-            this.socket.joinGroup(address);
-        } catch (IOException e) {
-            e.printStackTrace();
+            switch(actionParts[0])
+            {
+                case "backup":
+                    System.out.println("\n ======== \n Backing up " + actionParts[1] + " \n ======== \n\n");
+                    try {
+                        this.putChunk(actionParts[1], Integer.parseInt(actionParts[2]));
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    break;
+                case "restore":
+                    System.out.println("\n ======== \n Restoring " + actionParts[1] + " \n ======== \n\n");
+                    try {
+                        this.getChunk(actionParts[1]);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    break;
+            }
         }
 
-        try {
-            this.getChunk();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
 
     }
 
 
-
-
-    public void getChunk() throws InterruptedException {
-        String filename = "uml_diagram.png";
-        filesBackedUp.length();
-
+    public void getChunk(String filename) throws InterruptedException {
         String fileId = "";
 
         String messageToSend;
@@ -72,15 +104,10 @@ public class MulticastClientThread extends Thread {
         Integer chunkReplications;
         Integer timeout;
 
-
-
-        File file = new File(filename, 1);
-
+        File file = new File(filename);
 
         ArrayList<Chunk> chunksList = new ArrayList<Chunk>();
         boolean allChunksReceived = false;
-
-
 
         for(int i=0; i<filesBackedUp.length(); i++) {
             if(filesBackedUp.getJSONObject(i).has(filename))
@@ -115,7 +142,7 @@ public class MulticastClientThread extends Thread {
                 System.out.println("Retry #" + retries);
 
                 // send message to get chunks
-                sendMessage(messageToSend);
+                sendMessage(messageToSend, mcSocket);
 
                 // receive chunk from server
                 byte[] chunkByte = receiveChunk(fileId, chunkNumber, timeout);
@@ -197,8 +224,8 @@ public class MulticastClientThread extends Thread {
                 byte[] buf = new byte[65000];
 
                 receivedPacket = new DatagramPacket(buf, buf.length);
-                this.socket.setSoTimeout(timeout);
-                this.socket.receive(receivedPacket);
+                this.mdrSocket.setSoTimeout(timeout);
+                this.mdrSocket.receive(receivedPacket);
 
                 String received = new String(receivedPacket.getData(), 0, receivedPacket.getLength());
 
@@ -233,10 +260,10 @@ public class MulticastClientThread extends Thread {
 
 
 
-    public void putChunk() throws InterruptedException {
+    public void putChunk(String filename, int replications) throws InterruptedException {
         DatagramPacket receivedPacket;
 
-        File file = new File("/Users/josemiguelmelo/Desktop/uml_diagram.png", 1);
+        File file = new File(filename, replications);
 
         String messageToSend;
 
@@ -273,7 +300,7 @@ public class MulticastClientThread extends Thread {
 
             if(chunkReplications < file.getReplicationDegree())
             {
-                System.out.println("Couldn't replicate chunk no." + chunk.getNumber() + " " + chunkReplications + " times.");
+                System.out.println("Couldn't replicate chunk #" + chunk.getNumber() + " at least " + file.getReplicationDegree() + " times.");
                 return;
             }
 
@@ -312,8 +339,8 @@ public class MulticastClientThread extends Thread {
                 byte[] buf = new byte[256];
 
                 receivedPacket = new DatagramPacket(buf, buf.length);
-                this.socket.setSoTimeout(timeout);
-                this.socket.receive(receivedPacket);
+                this.mcSocket.setSoTimeout(timeout);
+                this.mcSocket.receive(receivedPacket);
 
                 String received = new String(receivedPacket.getData(), 0, receivedPacket.getLength());
 
@@ -342,16 +369,16 @@ public class MulticastClientThread extends Thread {
         return chunksStored;
     }
 
-    public void sendMessage(String message)
+    public void sendMessage(String message, MulticastSocket socket)
     {
         byte[] buf = new byte[message.getBytes().length];
         System.arraycopy(message.getBytes(), 0, buf, 0, message.getBytes().length);
 
         DatagramPacket packet;
-        packet = new DatagramPacket(buf, buf.length, address, port);
+        packet = new DatagramPacket(buf, buf.length, mcAddress, mcPort);
 
         try {
-            this.socket.send(packet);
+            socket.send(packet);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -364,10 +391,10 @@ public class MulticastClientThread extends Thread {
         System.arraycopy(chunk.getBody(), 0, buf, message.getBytes().length, chunk.getBody().length);
 
         DatagramPacket packet;
-        packet = new DatagramPacket(buf, buf.length, address, port);
+        packet = new DatagramPacket(buf, buf.length, this.mdbAddress, this.mdbPort);
 
         try {
-            this.socket.send(packet);
+            this.mdbSocket.send(packet);
         } catch (IOException e) {
             e.printStackTrace();
         }

@@ -6,28 +6,57 @@ import Peer.Protocol.Protocol;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.InetAddress;
-import java.net.MulticastSocket;
+import java.lang.reflect.Field;
+import java.net.*;
 import java.nio.charset.Charset;
 
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
-public class MulticastServerThread {
-    int port;
-    MulticastSocket socket;
-    InetAddress address;
+public class MulticastServerThread extends Thread {
+    int mcPort;
+    MulticastSocket mcSocket;
+    InetAddress mcAddress;
+
+    int mdbPort;
+    MulticastSocket mdbSocket;
+    InetAddress mdbAddress;
+
+    int mdrPort;
+    MulticastSocket mdrSocket;
+    InetAddress mdrAddress;
+
+    MulticastSocket activeSocket;
+
     int maximumSpace;
     String savePath;
     JSONArray chunksReplication;
 
-    public MulticastServerThread(String ip, int port) throws IOException {
-        this.port = port;
-        this.socket = new MulticastSocket(port);
-        this.address = InetAddress.getByName(ip);
-        socket.joinGroup(address);
+    public MulticastServerThread(String mcIp, int mcPort, String mdbIp, int mdbPort, String mdrIp, int mdrPort, String socket) throws IOException, InterruptedException {
+        this.mcPort = mcPort;
+        this.mcAddress = InetAddress.getByName(mcIp);
+        this.mcSocket = new MulticastSocket(mcPort);
+        this.mcSocket.joinGroup(mcAddress);
+
+        this.mdbPort = mdbPort;
+        this.mdbAddress = InetAddress.getByName(mdbIp);
+        this.mdbSocket = new MulticastSocket(mdbPort);
+        this.mdbSocket.joinGroup(mdbAddress);
+
+        this.mdrPort = mdrPort;
+        this.mdrAddress = InetAddress.getByName(mdrIp);
+        this.mdrSocket = new MulticastSocket(mdrPort);
+        this.mdrSocket.joinGroup(mdrAddress);
+
+        Field field = null;
+        try {
+            field = this.getClass().getDeclaredField(socket);
+            field.setAccessible(true);
+            this.activeSocket = (MulticastSocket) field.get(this);
+        } catch (IllegalAccessException | NoSuchFieldException e) {
+            e.printStackTrace();
+        }
+
         this.loadSettings();
 
         String chunkReplicationString = Protocol.readFile(Protocol.chunksReplication, Charset.defaultCharset());
@@ -52,7 +81,7 @@ public class MulticastServerThread {
         System.out.println("Save Path: " + this.savePath);
     }
 
-    public void run() throws IOException {
+    public void run() {
 
         boolean running = true;
         DatagramPacket receivedPacket;
@@ -62,25 +91,21 @@ public class MulticastServerThread {
                 byte[] buf = new byte[65000];
 
                 receivedPacket = new DatagramPacket(buf, buf.length);
-                socket.receive(receivedPacket);
+                activeSocket.receive(receivedPacket);
 
                 String receivedMessage = new String(receivedPacket.getData(), 0, receivedPacket.getLength());
                 byte[] receivedMessageBytes = java.util.Arrays.copyOf(receivedPacket.getData(), receivedPacket.getLength());
 
                 this.parseMessage(receivedMessage, receivedMessageBytes);
 
-                Thread.sleep(1000);
-
             }
             catch (IOException e) {
                 e.printStackTrace();
                 running = false;
-            } catch (InterruptedException e) {
-                e.printStackTrace();
             }
         }
 
-        socket.close();
+        mcSocket.close();
     }
 
     public void parseMessage(String message, byte[] messageBytes) {
@@ -125,7 +150,7 @@ public class MulticastServerThread {
 
                 System.out.println("Chunk size = " + chunk.getBody().length);
 
-                this.sendMessage("CHUNK " + Protocol.VERSION + " " + fileId + " " + chunkNo + " " + Protocol.crlf() + Protocol.crlf(), chunk);
+                this.sendMessage("CHUNK " + Protocol.VERSION + " " + fileId + " " + chunkNo + " " + Protocol.crlf() + Protocol.crlf(), chunk, mdrSocket, mdrAddress, mdrPort);
 
 
                 break;
@@ -133,6 +158,25 @@ public class MulticastServerThread {
                 System.out.println("Received message that couldn't be parsed.");
                 break;
         }
+    }
+
+    private Boolean chunkFromAnotherServer()
+    {
+        byte[] buf = new byte[65000];
+
+
+        DatagramPacket receivedPacket;
+
+        receivedPacket = new DatagramPacket(buf, buf.length);
+        try {
+            mdrSocket.setSoTimeout(Protocol.random.nextInt(400));
+            mdrSocket.receive(receivedPacket);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        String receivedMessage = new String(receivedPacket.getData(), 0, receivedPacket.getLength());
+        return false;
     }
 
     public byte[] getBodyFromMessage(byte[] messageBytes)
@@ -161,10 +205,10 @@ public class MulticastServerThread {
         buf = message.getBytes();
 
         DatagramPacket packet;
-        packet = new DatagramPacket(buf, buf.length, address, port);
+        packet = new DatagramPacket(buf, buf.length, mcAddress, mcPort);
 
         try {
-            this.socket.send(packet);
+            this.mcSocket.send(packet);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -184,7 +228,7 @@ public class MulticastServerThread {
         Protocol.writeFile(Protocol.chunksReplication, filesObject.toString());
     }
 
-    public void sendMessage(String message, Chunk chunk) {
+    public void sendMessage(String message, Chunk chunk, MulticastSocket socket, InetAddress address, int port) {
         byte[] buf = new byte[message.getBytes().length + chunk.getBody().length];
         System.arraycopy(message.getBytes(), 0, buf, 0, message.getBytes().length);
         System.arraycopy(chunk.getBody(), 0, buf, message.getBytes().length, chunk.getBody().length);
@@ -193,7 +237,7 @@ public class MulticastServerThread {
         packet = new DatagramPacket(buf, buf.length, address, port);
 
         try {
-            this.socket.send(packet);
+            socket.send(packet);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -211,6 +255,8 @@ public class MulticastServerThread {
                 Thread.sleep(Protocol.random.nextInt(400));
 
                 this.sendMessage("STORED " + version + " " + fileId + " " + chunkNumber + Protocol.crlf() + Protocol.crlf());
+            } else {
+                System.out.println("This chunk already exists.");
             }
 
         } catch (InterruptedException | IOException e)

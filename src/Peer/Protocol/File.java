@@ -13,6 +13,12 @@ public class File {
 
     private ArrayList<Chunk> chunks;
 
+    public File(String path) {
+        this.path = path;
+        this.replicationDegree = 0;
+        this.chunks = new ArrayList<Chunk>();
+    }
+
     public File(String path, int replicationDegree) {
         this.path = path;
         this.replicationDegree = replicationDegree;

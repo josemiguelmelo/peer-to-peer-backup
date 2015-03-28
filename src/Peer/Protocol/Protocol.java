@@ -53,7 +53,7 @@ public class Protocol {
             byte[] encoded = Files.readAllBytes(Paths.get(path));
             return new String(encoded, encoding);
         } catch(IOException e) {
-            System.out.println("File " + path + " missing.");
+            System.out.println("Could not find " + path + ".");
         }
 
         return "";
