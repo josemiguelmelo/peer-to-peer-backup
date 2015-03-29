@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.*;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -150,32 +152,85 @@ public class MulticastServerThread extends Thread {
 
                 System.out.println("Chunk size = " + chunk.getBody().length);
 
-                this.sendMessage("CHUNK " + Protocol.VERSION + " " + fileId + " " + chunkNo + " " + Protocol.crlf() + Protocol.crlf(), chunk, mdrSocket, mdrAddress, mdrPort);
+                if(!chunkFromAnotherServer(fileId, chunkNo))
+                {
+                    this.sendMessage("CHUNK " + Protocol.VERSION + " " + fileId + " " + chunkNo + " " + Protocol.crlf() + Protocol.crlf(), chunk, mdrSocket, mdrAddress, mdrPort);
+                } else {
+                    System.out.println("The chunk was already sent by another peer.");
+                }
 
 
                 break;
+            case "STORED":
+                System.out.println("STORED received...");
+                appendChunkReplication(messageParts[2], messageParts[3].replace(Protocol.crlf(), ""), 1);
+                break;
+            case "DELETE":
+                System.out.println("DELETE received");
+                try {
+                    deleteAllChunks(messageParts[1], messageParts[2].replace(Protocol.crlf(), ""));
+                } catch(IOException e)
+                {
+
+                }
+
             default:
                 System.out.println("Received message that couldn't be parsed.");
                 break;
         }
     }
 
-    private Boolean chunkFromAnotherServer()
-    {
-        byte[] buf = new byte[65000];
+    private void deleteAllChunks(String version, String fileId) throws IOException {
+        if(! version.equals(Protocol.VERSION))
+            return;
 
+        java.io.File folder = new java.io.File(savePath);
+        java.io.File[] listOfFiles = folder.listFiles();
+
+        for (java.io.File file : listOfFiles) {
+            if (file.isFile()) {
+                if(file.getName().endsWith(fileId))
+                {
+                    file.delete();
+                }
+            }
+        }
+    }
+
+    private Boolean chunkFromAnotherServer(String fileId, String chunkNo)
+    {
+        long t = System.currentTimeMillis();
+        int randomWait = Protocol.random.nextInt(400);
+        long endTry = t + randomWait;
+
+        byte[] buf = new byte[65000];
 
         DatagramPacket receivedPacket;
 
-        receivedPacket = new DatagramPacket(buf, buf.length);
-        try {
-            mdrSocket.setSoTimeout(Protocol.random.nextInt(400));
-            mdrSocket.receive(receivedPacket);
-        } catch (IOException e) {
-            e.printStackTrace();
+        while(System.currentTimeMillis() < endTry)
+        {
+            receivedPacket = new DatagramPacket(buf, buf.length);
+            try {
+                mdrSocket.setSoTimeout(randomWait);
+                mdrSocket.receive(receivedPacket);
+            } catch (IOException e) {
+            }
+
+            String receivedMessage = new String(receivedPacket.getData(), 0, receivedPacket.getLength());
+
+            receivedMessage = receivedMessage.replace(Protocol.crlf(), "");
+
+            String[] receivedMessageParts = receivedMessage.split(" ");
+
+            if(receivedMessageParts[0].equals("CHUNK") &&
+                    receivedMessageParts[1].equals(Protocol.VERSION) &&
+                    receivedMessageParts[2].equals(fileId) &&
+                    receivedMessageParts[3].equals(chunkNo))
+            {
+                return true;
+            }
         }
 
-        String receivedMessage = new String(receivedPacket.getData(), 0, receivedPacket.getLength());
         return false;
     }
 
@@ -214,12 +269,25 @@ public class MulticastServerThread extends Thread {
         }
     }
 
-    private void appendChunkReplication(String chunk, int replication) {
+    private void appendChunkReplication(String fileId, String chunkNo, int replication) {
+        Boolean chunkExisted = false;
+
         for (int i = 0; i < chunksReplication.length(); i++) {
-            if (chunksReplication.getJSONObject(i).has(chunk)) {
-                replication += chunksReplication.getJSONObject(i).getInt(chunk);
-                chunksReplication.getJSONObject(i).put(chunk, replication);
+            if (chunksReplication.getJSONObject(i).getString("chunkNo").equals(chunkNo)
+                    &&
+                    chunksReplication.getJSONObject(i).getString("fileId").equals(fileId)) {
+                replication += chunksReplication.getJSONObject(i).getInt("replication");
+                chunksReplication.getJSONObject(i).put("replication", replication);
+                chunkExisted = true;
             }
+        }
+
+        if(!chunkExisted) {
+            JSONObject newChunk = new JSONObject();
+            newChunk.put("fileId", fileId);
+            newChunk.put("chunkNo", chunkNo);
+            newChunk.put("replication", replication);
+            chunksReplication.put(newChunk);
         }
 
         JSONObject filesObject = new JSONObject();

@@ -1,21 +1,21 @@
 package Peer.Client;
 
+import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.net.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.*;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Scanner;
+
 import Peer.Protocol.Chunk;
 import Peer.Protocol.File;
 import Peer.Protocol.KMPMatch;
 import Peer.Protocol.Protocol;
 import org.json.JSONArray;
 import org.json.JSONObject;
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.InetAddress;
-import java.net.MulticastSocket;
-import java.net.SocketTimeoutException;
-import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.Scanner;
 
 public class MulticastClientThread extends Thread {
 
@@ -89,10 +89,40 @@ public class MulticastClientThread extends Thread {
                         e.printStackTrace();
                     }
                     break;
+                case "delete":
+                    System.out.println("\n ======== \n Deleting " + actionParts[1] + " \n ======== \n\n");
+                    this.deleteAllChunks(actionParts[1]);
             }
         }
 
 
+    }
+
+    private void deleteAllChunks(String filename) {
+
+        String fileId = "";
+
+        for(int i=0; i<filesBackedUp.length(); i++) {
+            if(filesBackedUp.getJSONObject(i).has(filename))
+            {
+                fileId = filesBackedUp.getJSONObject(i).getString(filename);
+            }
+        }
+
+        if(fileId.equals(""))
+        {
+            System.out.println("File " + filename + " was not backed up.");
+            return;
+        }
+
+        System.out.println("File ID: " + fileId);
+
+        String messageToSend = "DELETE"
+                + " " + Protocol.VERSION
+                + " " + fileId
+                + " " + Protocol.crlf() + Protocol.crlf();
+
+        sendMessage(messageToSend, mcSocket);
     }
 
 
