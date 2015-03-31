@@ -186,8 +186,6 @@ public class MulticastClientThread extends Thread {
     }
 
 
-
-
     public byte[] getBodyFromMessage(byte[] messageBytes)
     {
         Peer.Protocol.KMPMatch kmpMatch = new KMPMatch();
@@ -257,7 +255,6 @@ public class MulticastClientThread extends Thread {
 
         return null;
     }
-
 
 
     public void putChunk(String filename, int replications) throws InterruptedException {
