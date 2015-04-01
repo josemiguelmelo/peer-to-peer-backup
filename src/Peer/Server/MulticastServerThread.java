@@ -67,6 +67,10 @@ public class MulticastServerThread extends Thread {
         } else {
             this.chunksReplication = new JSONArray();
         }
+
+        // initiate thread responsible for space reclaiming
+        new SpaceReclaimingThread(mcIp, mcPort, mdbIp, mdbPort, mdrIp, mdrPort, socket);
+
     }
 
     public void loadSettings() throws IOException {
@@ -111,6 +115,12 @@ public class MulticastServerThread extends Thread {
     public void parseMessage(String message, byte[] messageBytes) {
         String[] messageParts = message.split(" ");
         byte[] body;
+
+        String fileId;
+        String chunkNo;
+
+        Chunk chunk;
+
         switch(messageParts[0]) {
             case "PUTCHUNK":
                 System.out.println("PUTCHUNK received...");
@@ -142,10 +152,10 @@ public class MulticastServerThread extends Thread {
                     return;
                 }
 
-                String fileId = messageParts[2];
-                String chunkNo = messageParts[3];
+                fileId = messageParts[2];
+                chunkNo = messageParts[3];
 
-                Chunk chunk = new Chunk();
+                chunk = new Chunk();
                 chunk.loadChunk(Integer.parseInt(chunkNo), fileId, savePath);
 
                 System.out.println("Chunk size = " + chunk.getBody().length);
@@ -154,6 +164,31 @@ public class MulticastServerThread extends Thread {
 
 
                 break;
+
+            case "REMOVED":
+
+                System.out.println("REMOVED received...");
+
+                if(messageParts.length < 4)
+                {
+                    System.out.println("Invalid REMOVED message.");
+                    return;
+                }
+
+
+                fileId = messageParts[2];
+                chunkNo = messageParts[3];
+
+                chunk = new Chunk();
+                chunk.loadChunk(Integer.parseInt(chunkNo), fileId, savePath);
+
+
+                /** send chunk if count drop below the desired replication degree **/
+
+                break;
+
+
+
             default:
                 System.out.println("Received message that couldn't be parsed.");
                 break;
