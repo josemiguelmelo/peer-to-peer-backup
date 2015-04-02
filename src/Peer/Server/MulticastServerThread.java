@@ -200,6 +200,7 @@ public class MulticastServerThread extends Thread {
                 fileId = messageParts[2];
                 chunkNo = messageParts[3];
 
+
                 System.out.println("CHUNK RECEIVED = " + fileId + " " + chunkNo) ;
                 chunk = new Chunk();
 
@@ -207,11 +208,15 @@ public class MulticastServerThread extends Thread {
                     /** send chunk if count drop below the desired replication degree **/
                     int currentChunkReplications = decrementChunkReplications(chunk);
 
+                    Integer chunkMinReplication = getChunkMinReplication(chunk);
+
+                    System.out.println("chunk min replication = " + chunkMinReplication);
+
                     if(currentChunkReplications == -1)
                     {
                         System.out.println("Chunk "+ chunk.getFileId() + " " + chunk.getNumber() +  " not found in " + Protocol.chunksReplication);
                     } else{
-                        if(currentChunkReplications < Protocol.minReplicationDegree){
+                        if(currentChunkReplications < chunkMinReplication){
                             try {
                                 putChunk(chunk);
                             } catch (InterruptedException e) {
@@ -449,6 +454,24 @@ public class MulticastServerThread extends Thread {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+
+    private Integer getChunkMinReplication(Chunk chunk)
+    {
+        Integer minReplication = -1;
+
+        for (int i = 0; i < chunksReplication.length(); i++) {
+            if (chunksReplication.getJSONObject(i).getString("chunkNo").equals(chunk.getNumber().toString())
+                    &&
+                    chunksReplication.getJSONObject(i).getString("fileId").equals(chunk.getFileId())) {
+
+                minReplication = chunksReplication.getJSONObject(i).getInt("minReplication");
+                break;
+            }
+        }
+
+        return minReplication;
     }
 
     private void appendChunkReplication(String fileId, String chunkNo, int replication, int minReplication) {
