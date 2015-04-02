@@ -22,6 +22,8 @@ public class Protocol {
 
     public static String chunksReplication = "chunks.json";
 
+    public static Integer minReplicationDegree = 3;
+
     public static String sha256(String string) throws NoSuchAlgorithmException
     {
         MessageDigest md;

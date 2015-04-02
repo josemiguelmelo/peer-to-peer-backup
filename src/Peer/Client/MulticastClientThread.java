@@ -35,6 +35,17 @@ public class MulticastClientThread extends Thread {
 
     JSONArray filesBackedUp;
 
+
+
+    java.io.File directory;
+
+    int maximumSpace;
+    String savePath;
+    JSONArray chunksReplication;
+
+
+
+
     public MulticastClientThread(String mcIp, int mcPort, String mdbIp, int mdbPort, String mdrIp, int mdrPort) throws IOException, InterruptedException {
         this.mcPort = mcPort;
         this.mcAddress = InetAddress.getByName(mcIp);
@@ -60,6 +71,90 @@ public class MulticastClientThread extends Thread {
             this.filesBackedUp = files.getJSONArray("files");
         } else {
             this.filesBackedUp = new JSONArray();
+        }
+
+        loadSettings();
+
+        directory = new java.io.File(savePath);
+    }
+
+
+    public void loadSettings() throws IOException {
+        String configString = Protocol.readFile(Protocol.settingsPath, Charset.defaultCharset());
+
+        JSONObject config = new JSONObject(configString.trim());
+
+        this.maximumSpace = config.getInt("maximumSpace");
+        System.out.println("Max Space: " + this.maximumSpace);
+
+        this.savePath = config.getString("relativeSavePath");
+        System.out.println("Save Path: " + this.savePath);
+    }
+
+    public static long getFolderSize(java.io.File dir) {
+        long size = 0;
+        for (java.io.File file : dir.listFiles()) {
+            if (file.isFile()) {
+                System.out.println(file.getName() + " " + file.length());
+                size += file.length();
+            }
+            else
+                size += getFolderSize(file);
+        }
+        return size;
+    }
+
+    /** Returns the biggest file in folder **/
+    public java.io.File getBiggestFile(){
+        java.io.File biggestFile = null;
+        for (java.io.File file : directory.listFiles()) {
+
+            if(biggestFile == null)
+                biggestFile = file;
+
+
+            if (biggestFile.length() < file.length() )
+                biggestFile = file;
+
+
+
+        }
+
+        return biggestFile;
+    }
+
+
+    /** Removes the biggest file **/
+    public void reduceSpaceUsed(long sizeToReduce){
+        long spaceReduced = 0;
+        while(spaceReduced < sizeToReduce){
+            java.io.File fileToDelete = getBiggestFile();
+
+            System.out.println(fileToDelete);
+            if(fileToDelete == null)
+            {
+                System.out.println("Any file could be deleted.");
+                break;
+            }
+
+
+            String filename = fileToDelete.getName();
+
+            String[] fileInformation = filename.split("-");
+
+            String fileId = fileInformation[1];
+            String chunkNo = fileInformation[0];
+
+            long fileSize = fileToDelete.length();
+            spaceReduced += fileSize;
+
+            if(fileToDelete.delete())
+            {
+                this.sendMessage("REMOVED " + Protocol.VERSION + " " + fileId + " " + chunkNo + " " + Protocol.crlf() + Protocol.crlf());
+            }else{
+                spaceReduced -=fileSize;
+                System.out.println(fileToDelete.getName() + " could not be removed.");
+            }
         }
     }
 
@@ -92,6 +187,10 @@ public class MulticastClientThread extends Thread {
                 case "delete":
                     System.out.println("\n ======== \n Deleting " + actionParts[1] + " \n ======== \n\n");
                     this.deleteAllChunks(actionParts[1]);
+                case "free":
+                    System.out.println("\n ======== \n Freeing " + actionParts[1] + " \n ======== \n\n");
+                    reduceSpaceUsed(Integer.parseUnsignedInt(actionParts[1]));
+                    break;
             }
         }
 
@@ -396,6 +495,7 @@ public class MulticastClientThread extends Thread {
         return chunksStored;
     }
 
+
     public void sendMessage(String message, MulticastSocket socket)
     {
         byte[] buf = new byte[message.getBytes().length];
@@ -426,4 +526,23 @@ public class MulticastClientThread extends Thread {
             e.printStackTrace();
         }
     }
+
+
+
+    public void sendMessage(String message)
+    {
+        byte[] buf;
+
+        buf = message.getBytes();
+
+        DatagramPacket packet;
+        packet = new DatagramPacket(buf, buf.length, mcAddress, mcPort);
+
+        try {
+            this.mcSocket.send(packet);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
 }

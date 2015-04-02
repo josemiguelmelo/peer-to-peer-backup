@@ -39,6 +39,8 @@ public class Chunk {
         return number;
     }
 
+    public String getFileId() { return this.fileId; }
+
     public byte[] getBody() {
         return content.toByteArray();
     }
@@ -46,7 +48,10 @@ public class Chunk {
     public ByteArrayOutputStream getBodyOutputStream() { return this.content; }
 
 
-    public void loadChunk(Integer number, String fileId, String path){
+    public boolean loadChunk(Integer number, String fileId, String path){
+        this.number = number;
+        this.fileId = fileId;
+
         java.io.File file = new File(path + number + "-" + fileId);
 
         if(file.isFile()){
@@ -57,10 +62,13 @@ public class Chunk {
                 byte[] data = Files.readAllBytes(file.toPath());
 
                 this.content.write(data, 0, data.length);
+                return true;
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
+        return false;
+
     }
 
     public Boolean save(String pathToSave)
