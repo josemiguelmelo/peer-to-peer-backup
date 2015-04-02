@@ -62,6 +62,10 @@ public class MulticastServerThread extends Thread {
 
         this.loadSettings();
 
+        loadChunksReplication();
+    }
+
+    private void loadChunksReplication() {
         String chunkReplicationString = Protocol.readFile(Protocol.chunksReplication, Charset.defaultCharset());
 
         if(!chunkReplicationString.equals("")) {
@@ -171,7 +175,7 @@ public class MulticastServerThread extends Thread {
                 break;
             case "STORED":
                 System.out.println("STORED received...");
-                appendChunkReplication(messageParts[2], messageParts[3].replace(Protocol.crlf(), ""), 1);
+                appendChunkReplication(messageParts[2], messageParts[3].replace(Protocol.crlf(), ""), 1, 0);
                 break;
 
             case "DELETE":
@@ -199,7 +203,7 @@ public class MulticastServerThread extends Thread {
                 System.out.println("CHUNK RECEIVED = " + fileId + " " + chunkNo) ;
                 chunk = new Chunk();
 
-                if(chunk.loadChunk(Integer.parseInt(chunkNo), fileId, savePath) == true){
+                if(chunk.loadChunk(Integer.parseInt(chunkNo), fileId, savePath)){
                     /** send chunk if count drop below the desired replication degree **/
                     int currentChunkReplications = decrementChunkReplications(chunk);
 
@@ -279,7 +283,7 @@ public class MulticastServerThread extends Thread {
                         )
                 {
                     System.out.println("Chunk stored.");
-                    appendChunkReplication(messageParts[2], messageParts[3].replace(Protocol.crlf(), ""), 1);
+                    appendChunkReplication(messageParts[2], messageParts[3].replace(Protocol.crlf(), ""), 1, 0);
                     chunksStored++;
                 }
 
@@ -308,7 +312,6 @@ public class MulticastServerThread extends Thread {
 
             System.out.println("\n =========== \nSending chunk no." + chunk.getNumber() + "\n =========== \n");
 
-        /** TODO Protocol.minReplicationDegree **/
             messageToSend = "PUTCHUNK"
                     + " " + Protocol.VERSION
                     + " " + chunk.getFileId()
@@ -448,8 +451,11 @@ public class MulticastServerThread extends Thread {
         }
     }
 
-    private void appendChunkReplication(String fileId, String chunkNo, int replication) {
+    private void appendChunkReplication(String fileId, String chunkNo, int replication, int minReplication) {
+        loadChunksReplication();
         Boolean chunkExisted = false;
+
+        System.out.println("chunkNo=" + chunkNo + " - MIN REP: " + minReplication);
 
         for (int i = 0; i < chunksReplication.length(); i++) {
             if (chunksReplication.getJSONObject(i).getString("chunkNo").equals(chunkNo)
@@ -457,15 +463,22 @@ public class MulticastServerThread extends Thread {
                     chunksReplication.getJSONObject(i).getString("fileId").equals(fileId)) {
                 replication += chunksReplication.getJSONObject(i).getInt("replication");
                 chunksReplication.getJSONObject(i).put("replication", replication);
+                if(minReplication != 0)
+                {
+                    System.out.println("updating min rep to " + minReplication);
+                    chunksReplication.getJSONObject(i).put("minReplication", minReplication);
+                }
                 chunkExisted = true;
             }
         }
 
         if(!chunkExisted) {
+            System.out.println("chunk doesn't exist json");
             JSONObject newChunk = new JSONObject();
             newChunk.put("fileId", fileId);
             newChunk.put("chunkNo", chunkNo);
             newChunk.put("replication", replication);
+            newChunk.put("minReplication", minReplication);
             chunksReplication.put(newChunk);
         }
 
@@ -498,13 +511,11 @@ public class MulticastServerThread extends Thread {
             bodyStream.write(body);
             Chunk chunk = new Chunk(fileId, chunkNumber, bodyStream.size(), bodyStream);
 
-            if(chunk.save(savePath)) {
-                Thread.sleep(Protocol.random.nextInt(400));
+            appendChunkReplication(fileId, chunkNumber.toString(), 0, chunkReplicationMin);
 
-                this.sendMessage("STORED " + version + " " + fileId + " " + chunkNumber + Protocol.crlf() + Protocol.crlf());
-            } else {
-                System.out.println("This chunk already exists.");
-            }
+            chunk.save(savePath);
+            Thread.sleep(Protocol.random.nextInt(400));
+            this.sendMessage("STORED " + version + " " + fileId + " " + chunkNumber + Protocol.crlf() + Protocol.crlf());
 
         } catch (InterruptedException | IOException e)
         {
