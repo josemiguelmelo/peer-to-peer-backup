@@ -160,15 +160,14 @@ public class MulticastServerThread extends Thread {
                 chunkNo = messageParts[3];
 
                 chunk = new Chunk();
-                chunk.loadChunk(Integer.parseInt(chunkNo), fileId, savePath);
+                if(chunk.loadChunk(Integer.parseInt(chunkNo), fileId, savePath)) {
+                    System.out.println("Chunk size = " + chunk.getBody().length);
 
-                System.out.println("Chunk size = " + chunk.getBody().length);
-
-                if(!chunkFromAnotherServer(fileId, chunkNo))
-                {
-                    this.sendMessage("CHUNK " + Protocol.VERSION + " " + fileId + " " + chunkNo + " " + Protocol.crlf() + Protocol.crlf(), chunk, mdrSocket, mdrAddress, mdrPort);
-                } else {
-                    System.out.println("The chunk was already sent by another peer.");
+                    if (!chunkFromAnotherServer(fileId, chunkNo)) {
+                        this.sendMessage("CHUNK " + Protocol.VERSION + " " + fileId + " " + chunkNo + " " + Protocol.crlf() + Protocol.crlf(), chunk, mdrSocket, mdrAddress, mdrPort);
+                    } else {
+                        System.out.println("The chunk was already sent by another peer.");
+                    }
                 }
 
 
