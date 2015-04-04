@@ -85,17 +85,17 @@ public class MulticastClientThread extends Thread {
         JSONObject config = new JSONObject(configString.trim());
 
         this.maximumSpace = config.getInt("maximumSpace");
-        System.out.println("Max Space: " + this.maximumSpace);
+        //System.out.println("Max Space: " + this.maximumSpace);
 
         this.savePath = config.getString("relativeSavePath");
-        System.out.println("Save Path: " + this.savePath);
+        //System.out.println("Save Path: " + this.savePath);
     }
 
     public static long getFolderSize(java.io.File dir) {
         long size = 0;
         for (java.io.File file : dir.listFiles()) {
             if (file.isFile()) {
-                System.out.println(file.getName() + " " + file.length());
+                //System.out.println(file.getName() + " " + file.length());
                 size += file.length();
             }
             else
@@ -130,7 +130,7 @@ public class MulticastClientThread extends Thread {
         while(spaceReduced < sizeToReduce){
             java.io.File fileToDelete = getBiggestFile();
 
-            System.out.println(fileToDelete);
+            //System.out.println(fileToDelete);
             if(fileToDelete == null)
             {
                 System.out.println("Any file could be deleted.");
@@ -153,7 +153,7 @@ public class MulticastClientThread extends Thread {
                 this.sendMessage("REMOVED " + Protocol.VERSION + " " + fileId + " " + chunkNo + " " + Protocol.crlf() + Protocol.crlf());
             }else{
                 spaceReduced -=fileSize;
-                System.out.println(fileToDelete.getName() + " could not be removed.");
+                //System.out.println(fileToDelete.getName() + " could not be removed.");
             }
         }
     }
@@ -214,7 +214,7 @@ public class MulticastClientThread extends Thread {
             return;
         }
 
-        System.out.println("File ID: " + fileId);
+        //System.out.println("File ID: " + fileId);
 
         String messageToSend = "DELETE"
                 + " " + Protocol.VERSION
@@ -251,7 +251,7 @@ public class MulticastClientThread extends Thread {
             return;
         }
 
-        System.out.println("File ID: " + fileId);
+        //System.out.println("File ID: " + fileId);
 
 
         int chunkNumber = 0;
@@ -290,7 +290,7 @@ public class MulticastClientThread extends Thread {
                             // add chunk to file
                             file.addChunk(chunk);
 
-                            System.out.println("chunk byte size = " + chunkByte.length);
+                            //System.out.println("chunk byte size = " + chunkByte.length);
                             if(chunkByte.length < Chunk.MAX_SIZE){
                                 allChunksReceived = true;
                             }
@@ -331,8 +331,8 @@ public class MulticastClientThread extends Thread {
 
         java.lang.System.arraycopy(messageBytes, patternPosition, body, 0, messageBytes.length - patternPosition);
 
-        System.out.println("Total message size: " + messageBytes.length);
-        System.out.println("Body size: " + body.length);
+        //System.out.println("Total message size: " + messageBytes.length);
+        //System.out.println("Body size: " + body.length);
         return body;
     }
 
@@ -367,7 +367,7 @@ public class MulticastClientThread extends Thread {
                         )
                 {
 
-                    System.out.println("Chunk stored.");
+                    //System.out.println("Chunk stored.");
 
                     byte[] receivedMessageBytes = java.util.Arrays.copyOf(receivedPacket.getData(), receivedPacket.getLength());
 
@@ -397,7 +397,7 @@ public class MulticastClientThread extends Thread {
         Integer chunkReplications;
         Integer timeout;
 
-        System.out.println("File Info. Chunks: " + file.getChunks().size());
+       // System.out.println("File Info. Chunks: " + file.getChunks().size());
 
         for (Chunk chunk : file.getChunks()) {
             retries = 1;
@@ -480,7 +480,7 @@ public class MulticastClientThread extends Thread {
                         && messageParts[3].equals(chunk.getNumber().toString())
                         )
                 {
-                    System.out.println("Chunk stored.");
+                    //System.out.println("Chunk stored.");
                     chunksStored++;
                 }
 

@@ -24,7 +24,7 @@ public class Chunk {
         this.chunkSize = chunkSize;
         this.content = content;
         this.fileId = "";
-        System.out.println("Chunk created. Chunk Size: " + content.size());
+        //System.out.println("Chunk created. Chunk Size: " + content.size());
     }
 
     public Chunk(String fileId, int number, int chunkSize, ByteArrayOutputStream content) {
@@ -32,7 +32,7 @@ public class Chunk {
         this.chunkSize = chunkSize;
         this.content = content;
         this.fileId = fileId;
-        System.out.println("Chunk created. Chunk Size: " + content.size());
+        //System.out.println("Chunk created. Chunk Size: " + content.size());
     }
 
     public Integer getNumber() {
@@ -56,7 +56,7 @@ public class Chunk {
 
         if(file.isFile()){
 
-            System.out.println(file.toPath());
+            //System.out.println(file.toPath());
 
             try {
                 byte[] data = Files.readAllBytes(file.toPath());
@@ -87,7 +87,7 @@ public class Chunk {
             f.createNewFile();
             outputStream = new FileOutputStream(pathToSave + number + "-" + fileId);
             this.content.writeTo(outputStream);
-            System.out.println("Chunk saved");
+           // System.out.println("Chunk saved");
         } catch (IOException e) {
             e.printStackTrace();
         }

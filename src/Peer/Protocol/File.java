@@ -104,7 +104,7 @@ public class File {
             // append = true
             outputStream = new FileOutputStream(pathToSave, true);
 
-            System.out.println("Chunk saved");
+            //System.out.println("Chunk saved");
 
             for(int i = 0; i < chunks.size(); i++)
             {

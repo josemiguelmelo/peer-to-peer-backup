@@ -82,10 +82,10 @@ public class MulticastServerThread extends Thread {
         JSONObject config = new JSONObject(configString.trim());
 
         this.maximumSpace = config.getInt("maximumSpace");
-        System.out.println("Max Space: " + this.maximumSpace);
+        //System.out.println("Max Space: " + this.maximumSpace);
 
         this.savePath = config.getString("relativeSavePath");
-        System.out.println("Save Path: " + this.savePath);
+        //System.out.println("Save Path: " + this.savePath);
     }
 
     public void run() {
@@ -100,10 +100,28 @@ public class MulticastServerThread extends Thread {
                 receivedPacket = new DatagramPacket(buf, buf.length);
                 activeSocket.receive(receivedPacket);
 
+                InetAddress address = receivedPacket.getAddress();
+
+                String packetSenderAddress = address.getLocalHost().getHostAddress();
+                String machineAddress = InetAddress.getLocalHost().getHostAddress();
+/*
+                System.out.println("INET ADDRESS = " + machineAddress);
+
+                System.out.println("ADDRESS = " + packetSenderAddress);
+
+*/
                 String receivedMessage = new String(receivedPacket.getData(), 0, receivedPacket.getLength());
                 byte[] receivedMessageBytes = java.util.Arrays.copyOf(receivedPacket.getData(), receivedPacket.getLength());
 
-                this.parseMessage(receivedMessage, receivedMessageBytes);
+                if(!machineAddress.equals(packetSenderAddress))
+                {
+                    System.out.println("Machine Address is sender.");
+
+                    this.parseMessage(receivedMessage, receivedMessageBytes);
+                }
+
+
+
 
             }
             catch (IOException e) {
@@ -136,8 +154,6 @@ public class MulticastServerThread extends Thread {
 
                 body = this.getBodyFromMessage(messageBytes);
 
-                System.out.println("Body size: " + body.length);
-
                 this.storeChunk(
                         messageParts[1],
                         messageParts[2],
@@ -161,7 +177,6 @@ public class MulticastServerThread extends Thread {
 
                 chunk = new Chunk();
                 if(chunk.loadChunk(Integer.parseInt(chunkNo), fileId, savePath)) {
-                    System.out.println("Chunk size = " + chunk.getBody().length);
 
                     if (!chunkFromAnotherServer(fileId, chunkNo)) {
                         this.sendMessage("CHUNK " + Protocol.VERSION + " " + fileId + " " + chunkNo + " " + Protocol.crlf() + Protocol.crlf(), chunk, mdrSocket, mdrAddress, mdrPort);
@@ -200,7 +215,7 @@ public class MulticastServerThread extends Thread {
                 chunkNo = messageParts[3];
 
 
-                System.out.println("CHUNK RECEIVED = " + fileId + " " + chunkNo) ;
+                //System.out.println("CHUNK RECEIVED = " + fileId + " " + chunkNo) ;
                 chunk = new Chunk();
 
                 if(chunk.loadChunk(Integer.parseInt(chunkNo), fileId, savePath)){
@@ -208,8 +223,6 @@ public class MulticastServerThread extends Thread {
                     int currentChunkReplications = decrementChunkReplications(chunk);
 
                     Integer chunkMinReplication = getChunkMinReplication(chunk);
-
-                    System.out.println("chunk min replication = " + chunkMinReplication);
 
                     if(currentChunkReplications == -1)
                     {
@@ -253,8 +266,6 @@ public class MulticastServerThread extends Thread {
     }
 
 
-
-
     private Integer sendChunk(String messageToSend, Integer timeout, Chunk chunk) {
         DatagramPacket receivedPacket;
         sendMessage(messageToSend, chunk);
@@ -286,7 +297,7 @@ public class MulticastServerThread extends Thread {
                         && messageParts[3].equals(chunk.getNumber().toString())
                         )
                 {
-                    System.out.println("Chunk stored.");
+                    //System.out.println("Chunk stored.");
                     appendChunkReplication(messageParts[2], messageParts[3].replace(Protocol.crlf(), ""), 1, 0);
                     chunksStored++;
                 }
@@ -477,7 +488,7 @@ public class MulticastServerThread extends Thread {
         loadChunksReplication();
         Boolean chunkExisted = false;
 
-        System.out.println("chunkNo=" + chunkNo + " - MIN REP: " + minReplication);
+        //System.out.println("chunkNo=" + chunkNo + " - MIN REP: " + minReplication);
 
         for (int i = 0; i < chunksReplication.length(); i++) {
             if (chunksReplication.getJSONObject(i).getString("chunkNo").equals(chunkNo)
@@ -487,7 +498,7 @@ public class MulticastServerThread extends Thread {
                 chunksReplication.getJSONObject(i).put("replication", replication);
                 if(minReplication != 0)
                 {
-                    System.out.println("updating min rep to " + minReplication);
+                    //System.out.println("updating min rep to " + minReplication);
                     chunksReplication.getJSONObject(i).put("minReplication", minReplication);
                 }
                 chunkExisted = true;
@@ -495,7 +506,7 @@ public class MulticastServerThread extends Thread {
         }
 
         if(!chunkExisted) {
-            System.out.println("chunk doesn't exist json");
+            //System.out.println("chunk doesn't exist json");
             JSONObject newChunk = new JSONObject();
             newChunk.put("fileId", fileId);
             newChunk.put("chunkNo", chunkNo);
