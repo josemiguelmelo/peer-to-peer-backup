@@ -153,7 +153,6 @@ public class MulticastClientThread extends Thread {
                 this.sendMessage("REMOVED " + Protocol.VERSION + " " + fileId + " " + chunkNo + " " + Protocol.crlf() + Protocol.crlf());
             }else{
                 spaceReduced -=fileSize;
-                //System.out.println(fileToDelete.getName() + " could not be removed.");
             }
         }
     }
@@ -187,6 +186,7 @@ public class MulticastClientThread extends Thread {
                 case "delete":
                     System.out.println("\n ======== \n Deleting " + actionParts[1] + " \n ======== \n\n");
                     this.deleteAllChunks(actionParts[1]);
+                    break;
                 case "free":
                     System.out.println("\n ======== \n Freeing " + actionParts[1] + " \n ======== \n\n");
                     reduceSpaceUsed(Integer.parseUnsignedInt(actionParts[1]));

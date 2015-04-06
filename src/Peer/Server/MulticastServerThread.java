@@ -35,6 +35,10 @@ public class MulticastServerThread extends Thread {
     String savePath;
     JSONArray chunksReplication;
 
+
+    String packetSenderAddress;
+    String machineAddress;
+
     public MulticastServerThread(String mcIp, int mcPort, String mdbIp, int mdbPort, String mdrIp, int mdrPort, String socket) throws IOException, InterruptedException {
         this.mcPort = mcPort;
         this.mcAddress = InetAddress.getByName(mcIp);
@@ -102,14 +106,10 @@ public class MulticastServerThread extends Thread {
 
                 InetAddress address = receivedPacket.getAddress();
 
-                String packetSenderAddress = address.getLocalHost().getHostAddress();
-                String machineAddress = InetAddress.getLocalHost().getHostAddress();
-/*
-                System.out.println("INET ADDRESS = " + machineAddress);
+                packetSenderAddress = address.getLocalHost().getHostAddress();
+                machineAddress = InetAddress.getLocalHost().getHostAddress();
 
-                System.out.println("ADDRESS = " + packetSenderAddress);
 
-*/
                 String receivedMessage = new String(receivedPacket.getData(), 0, receivedPacket.getLength());
                 byte[] receivedMessageBytes = java.util.Arrays.copyOf(receivedPacket.getData(), receivedPacket.getLength());
 
@@ -189,7 +189,7 @@ public class MulticastServerThread extends Thread {
                 break;
             case "STORED":
                 System.out.println("STORED received...");
-                appendChunkReplication(messageParts[2], messageParts[3].replace(Protocol.crlf(), ""), 1, 0);
+                appendChunkReplication(messageParts[2], messageParts[3].replace(Protocol.crlf(), ""), packetSenderAddress, 0);
                 break;
 
             case "DELETE":
@@ -214,8 +214,6 @@ public class MulticastServerThread extends Thread {
                 fileId = messageParts[2];
                 chunkNo = messageParts[3];
 
-
-                //System.out.println("CHUNK RECEIVED = " + fileId + " " + chunkNo) ;
                 chunk = new Chunk();
 
                 if(chunk.loadChunk(Integer.parseInt(chunkNo), fileId, savePath)){
@@ -298,7 +296,7 @@ public class MulticastServerThread extends Thread {
                         )
                 {
                     //System.out.println("Chunk stored.");
-                    appendChunkReplication(messageParts[2], messageParts[3].replace(Protocol.crlf(), ""), 1, 0);
+                    appendChunkReplication(messageParts[2], messageParts[3].replace(Protocol.crlf(), ""), packetSenderAddress, 0);
                     chunksStored++;
                 }
 
@@ -357,13 +355,36 @@ public class MulticastServerThread extends Thread {
 
     private int decrementChunkReplications(Chunk chunk)
     {
-        int currentChunkReplications = -1;
+        loadChunksReplication();
+
+        JSONArray currentChunkReplications = new JSONArray();
+
+        int finalSize = -1;
+
         for (int i = 0; i < chunksReplication.length(); i++) {
             if (chunksReplication.getJSONObject(i).getString("chunkNo").equals(chunk.getNumber().toString())
                     &&
                     chunksReplication.getJSONObject(i).getString("fileId").equals(chunk.getFileId())) {
-                currentChunkReplications = chunksReplication.getJSONObject(i).getInt("replication");
-                currentChunkReplications--;
+
+                currentChunkReplications = chunksReplication.getJSONObject(i).getJSONArray("replication");
+
+                int j;
+
+
+                System.out.println("INITIAL Current chunk replication size = " + currentChunkReplications.length());
+
+                for( j = 0; j < currentChunkReplications.length(); j++)
+                {
+                    if(currentChunkReplications.get(j).equals(packetSenderAddress))
+                    {
+                        currentChunkReplications.remove(j);
+                    }
+                }
+
+                System.out.println("FINAL Current chunk replication size = " + currentChunkReplications.length());
+
+                finalSize = currentChunkReplications.length();
+
                 chunksReplication.getJSONObject(i).put("replication", currentChunkReplications);
 
             }
@@ -374,7 +395,7 @@ public class MulticastServerThread extends Thread {
 
         Protocol.writeFile(Protocol.chunksReplication, filesObject.toString());
 
-        return currentChunkReplications;
+        return finalSize;
     }
 
     private void deleteAllChunks(String version, String fileId) throws IOException {
@@ -484,21 +505,41 @@ public class MulticastServerThread extends Thread {
         return minReplication;
     }
 
-    private void appendChunkReplication(String fileId, String chunkNo, int replication, int minReplication) {
+
+    private boolean existsInJSONArray(String string, JSONArray array)
+    {
+        for(int i = 0; i < array.length(); i++)
+        {
+            if(array.get(i).equals(string))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void appendChunkReplication(String fileId, String chunkNo, String replication, int minReplication) {
         loadChunksReplication();
         Boolean chunkExisted = false;
-
-        //System.out.println("chunkNo=" + chunkNo + " - MIN REP: " + minReplication);
 
         for (int i = 0; i < chunksReplication.length(); i++) {
             if (chunksReplication.getJSONObject(i).getString("chunkNo").equals(chunkNo)
                     &&
                     chunksReplication.getJSONObject(i).getString("fileId").equals(fileId)) {
-                replication += chunksReplication.getJSONObject(i).getInt("replication");
-                chunksReplication.getJSONObject(i).put("replication", replication);
+                JSONArray replicationArray = chunksReplication.getJSONObject(i).getJSONArray("replication");
+
+                if(replication != null){
+
+                    if(!existsInJSONArray(replication, replicationArray))
+                        replicationArray.put(replication);
+
+                }
+
+
+                chunksReplication.getJSONObject(i).put("replication", replicationArray);
+
                 if(minReplication != 0)
                 {
-                    //System.out.println("updating min rep to " + minReplication);
                     chunksReplication.getJSONObject(i).put("minReplication", minReplication);
                 }
                 chunkExisted = true;
@@ -508,9 +549,15 @@ public class MulticastServerThread extends Thread {
         if(!chunkExisted) {
             //System.out.println("chunk doesn't exist json");
             JSONObject newChunk = new JSONObject();
+
+            JSONArray replicationArray = new JSONArray();
+
+            if(replication != null)
+                replicationArray.put(replication);
+
             newChunk.put("fileId", fileId);
             newChunk.put("chunkNo", chunkNo);
-            newChunk.put("replication", replication);
+            newChunk.put("replication", replicationArray);
             newChunk.put("minReplication", minReplication);
             chunksReplication.put(newChunk);
         }
@@ -544,7 +591,7 @@ public class MulticastServerThread extends Thread {
             bodyStream.write(body);
             Chunk chunk = new Chunk(fileId, chunkNumber, bodyStream.size(), bodyStream);
 
-            appendChunkReplication(fileId, chunkNumber.toString(), 0, chunkReplicationMin);
+            appendChunkReplication(fileId, chunkNumber.toString(), null, chunkReplicationMin);
 
             chunk.save(savePath);
             Thread.sleep(Protocol.random.nextInt(400));
